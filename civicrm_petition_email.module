@@ -1,0 +1,275 @@
+<?php
+
+/*
+DB STRUCTURE
+petition id, recipient email, recipient name, default message, message field, subject
+*/
+
+function civicrm_petition_email_civicrm_buildForm( $formName, &$form ) {
+  if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
+    $survey_id = $form->getVar('_surveyId');
+    if ($survey_id) {
+      $petitionemailval = db_query('SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM civicrm_petition_email WHERE petition_id = %d', $survey_id);
+      while ($petitioninfo = db_fetch_array($petitionemailval)) {
+        $defaults = $form->getVar('_defaults');
+        $messagefield = 'custom_' . $petitioninfo['message_field'];
+        foreach ($form->_elements as $element) {
+          if ($element->_attributes['name'] == $messagefield) { 
+            $element->_value = $petitioninfo['default_message']; 
+          }
+        }
+        $defaults[$messagefield] = $form->_defaultValues[$messagefield] = $petitioninfo['default_message'];
+        $form->setVar('_defaults',$defaults);
+        break;
+      }
+    }
+  }
+
+  if ($formName != 'CRM_Campaign_Form_Petition') { return; }
+  $survey_id = $form->getVar('_surveyId');
+  if ($survey_id) {
+    $petitionemailval = db_query('SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM civicrm_petition_email WHERE petition_id = %d', $survey_id);
+    while ($petitioninfo = db_fetch_array($petitionemailval)) {
+      $form->_defaultValues['email_petition'] = 1;
+      $form->_defaultValues['recipient_name'] = $petitioninfo['recipient_name'];
+      $form->_defaultValues['recipient'] = $petitioninfo['recipient_email'];
+      $form->_defaultValues['default_message'] = $petitioninfo['default_message'];
+      $form->_defaultValues['user_message'] = $petitioninfo['message_field'];
+      $form->_defaultValues['subjectline'] = $petitioninfo['subject'];
+      break;
+    }
+  }
+  $form->add('checkbox', 'email_petition', ts('Send an email to a target'));
+  $form->add('text', 'recipient_name', ts('Recipient\'s Name'));
+  $form->add('text', 'recipient', ts('Recipient\'s Email'));
+  $validcustomgroups = array();
+  $surveycustomgroups = civicrm_api("CustomGroup","get", array (version=>'3','sequential' =>'1', 'extends' =>'Activity'));
+  if (is_array($surveycustomgroups['values']) && !$surveycustomgroups['is_error']) {
+    foreach ($surveycustomgroups['values'] as $group) {
+      if (is_array($group['extends_entity_column_value'])) {
+        $petitiontype = civicrm_petition_email_get_petition_type();
+        if (!in_array($petitiontype, $group['extends_entity_column_value'])) { continue; }
+      }
+      $validcustomgroups[] = $group['id'];
+    }
+  }
+  $textareas = civicrm_api("CustomField","get", array(version=>'3','sequential' =>'1', 'html_type' =>'TextArea'));
+  if (is_array($textareas['values']) && $textareas['count'] > 0 && !$textareas['is_error']) {
+    $textarealist = array('' => '- Select -');
+    foreach ($textareas['values'] as $value) {
+      if ( in_array($value['custom_group_id'], $validcustomgroups) ) {
+        $textarealist[$value['id']] = $value['label'];
+      }
+    }
+  }
+  if ( $textarealist == array('' => '- Select -') )  {
+    $textarealist = array('' => '- No Textarea Fields -');
+  }
+  $form->add('select', 'user_message', ts('Custom Message Field'), $textarealist);
+  $form->add('textarea', 'default_message', ts('Default Message'));
+  $form->add('text', 'subjectline', ts('Email Subject Line'));
+}
+
+function civicrm_petition_email_civicrm_alterContent(  &$content, $context, $tplName, &$object ) {
+  if ($tplName == 'CRM/Campaign/Form/Petition.tpl') {
+    $rendererval = $object->getVar('_renderer');
+    
+    //insert the field before is_active
+    $insertpoint = strpos($content, '<tr class="crm-campaign-survey-form-block-is_active">');
+    $content1 = substr($content, 0, $insertpoint);
+    $content3 = substr($content, $insertpoint);
+    $content2 = '
+  <tr class="crm-campaign-survey-form-block-email_petition">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['email_petition']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['email_petition']['html'].'
+      <div class="description">'.ts('Should signatures generate an email to the petition\'s target?').'</div>
+    </td>
+  </tr>
+  <tr class="crm-campaign-survey-form-block-recipient_name">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['recipient_name']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['recipient_name']['html'].'
+      <div class="description">'.ts('Enter the target\'s name (as he or she should see it) here.').'</div>
+    </td>
+  </tr>
+  <tr class="crm-campaign-survey-form-block-recipient">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['recipient']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['recipient']['html'].'
+      <div class="description">'.ts('Enter the target\'s email address here.').'</div>
+    </td>
+  </tr>
+  <tr class="crm-campaign-survey-form-block-user_message">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['user_message']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['user_message']['html'].'
+      <div class="description">'.ts('Select a field that will have the signer\'s custom message.  Make sure it is included in the Activity Profile you selected.').'</div>
+    </td>
+  </tr>
+  <tr class="crm-campaign-survey-form-block-default_message">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['default_message']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['default_message']['html'].'
+      <div class="description">'.ts('Enter the default message to be included in the email.').'</div>
+    </td>
+  </tr>
+  <tr class="crm-campaign-survey-form-block-subjectline">
+    <td class="label">'. $rendererval->_tpl->_tpl_vars['form']['subjectline']['label'] .'</td>
+    <td>'.$rendererval->_tpl->_tpl_vars['form']['subjectline']['html'].'
+      <div class="description">'.ts('Enter the subject line to be included in the email.').'</div>
+    </td>
+  </tr>
+';
+       
+    // jQuery to show/hide the email fields   
+    $content4 = '
+    <script type="text/javascript">
+      cj(document).ready( function() {
+        showHideEmailPetition();
+        checkProfileIncludesMessage();
+        cj("input#email_petition").click( function() { showHideEmailPetition(); });
+        cj("#profile_id").change( function() { checkProfileIncludesMessage(); });
+        cj("#user_message").change( function() { checkProfileIncludesMessage(); });
+      });
+      
+      function checkProfileIncludesMessage() {
+        cj("#profileMissingMessage").remove();
+        var actProfile = cj("#profile_id").val();
+        cj().crmAPI("UFField","get",{ "sequential" :"1", "uf_group_id" : actProfile },{ success:function (data){    
+          var msgField = cj("#user_message").val();
+          if (msgField) {
+            var fieldinfo = cj.inArray(msgField, data["values"])
+            var matchfield = false;
+            cj.each(data["values"], function(key, value) {
+              if (value["field_name"] == "custom_"+msgField) {
+                matchfield = true;
+                return true;
+              }
+            });
+            if (!matchfield) {
+              cj("#user_message").after("<div id=\'profileMissingMessage\' style=\'background-color: #FF9999; border: 1px solid #CC3333; display: inline-block; font-size: 85%; margin-left: 1ex; padding: 0.5ex; vertical-align: top;\'>'.ts('This field is not in the activity profile you selected').'</div>");
+            }
+          }
+        }
+      });
+      }
+      function showHideEmailPetition() {
+        if( cj("input#email_petition").attr("checked") ) {
+          cj("tr.crm-campaign-survey-form-block-recipient").show("fast");
+          cj("tr.crm-campaign-survey-form-block-recipient_name").show("fast");
+          cj("tr.crm-campaign-survey-form-block-user_message").show("fast");
+          cj("tr.crm-campaign-survey-form-block-default_message").show("fast");
+          cj("tr.crm-campaign-survey-form-block-subjectline").show("fast");
+        } else {
+          cj("tr.crm-campaign-survey-form-block-recipient").hide("fast");
+          cj("tr.crm-campaign-survey-form-block-recipient_name").hide("fast");
+          cj("tr.crm-campaign-survey-form-block-user_message").hide("fast");
+          cj("tr.crm-campaign-survey-form-block-default_message").hide("fast");
+          cj("tr.crm-campaign-survey-form-block-subjectline").hide("fast");
+        }
+      }
+    </script>';
+    
+    $content = $content1.$content2.$content3.$content4;
+  }
+}
+
+function civicrm_petition_email_civicrm_postProcess( $formName, &$form ) {
+  if ($formName != 'CRM_Campaign_Form_Petition') { return; }
+  if ( $form->_submitValues['email_petition'] == 1 ) {
+    require_once 'api/api.php';
+    $survey_id = $form->getVar('_surveyId');
+    if (!$survey_id) {  // Ugly hack because the form doesn't return the id
+      $surveys = civicrm_api("Survey","get", array(version=>'3', 'sequential' =>'1', 'title' =>$form->_submitValues['title']));
+      if (is_array($surveys['values'])) {
+        foreach($surveys['values'] as $survey) {
+          if ($lastmoddate > strtotime($survey['last_modified_date'])) { continue; }
+          $lastmoddate = strtotime($survey['last_modified_date']);
+          $survey_id = $survey['id'];
+        }
+      }
+    }
+    if (!$survey_id) {
+      CRM_Core_Session::setStatus( ts('Cannot find the petition for saving email delivery fields.') );
+      return;
+    }
+
+    $checkexisting = db_query("SELECT count(*) FROM civicrm_petition_email WHERE petition_id = %d", $survey_id);
+    if (db_result($checkexisting) == 0) {
+      $insert = db_query(
+        "INSERT INTO civicrm_petition_email (petition_id, recipient_email, recipient_name, default_message, message_field, subject) VALUES ( %d, '%s', '%s', '%s', %d, '%s' )", 
+        $survey_id, 
+        $form->_submitValues['recipient'], 
+        $form->_submitValues['recipient_name'], 
+        $form->_submitValues['default_message'],
+        $form->_submitValues['user_message'],
+        $form->_submitValues['subjectline']
+      );
+    } else {
+      $insert = db_query(
+        "UPDATE civicrm_petition_email SET recipient_email = '%s', recipient_name = '%s', default_message = '%s', message_field = %d, subject = '%s' WHERE petition_id = %d", 
+        $form->_submitValues['recipient'], 
+        $form->_submitValues['recipient_name'], 
+        $form->_submitValues['default_message'],
+        $form->_submitValues['user_message'],
+        $form->_submitValues['subjectline'],
+        $survey_id
+      );
+    }
+    if (!$insert) {
+      CRM_Core_Session::setStatus( ts('Could not save petition delivery information.') ); 
+    }
+  }
+}
+
+function civicrm_petition_email_civicrm_post( $op, $objectName, $objectId, &$objectRef ) {
+  if ($op == 'create' && $objectName == 'Activity') {
+    require_once 'api/api.php';
+    $petitiontype = civicrm_petition_email_get_petition_type();
+    
+    if ($objectRef->activity_type_id == $petitiontype) {
+      global $language;    
+      $petitionemailval = db_query('SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM civicrm_petition_email WHERE petition_id = %d', $objectRef->source_record_id);
+      while ($petitioninfo = db_fetch_array($petitionemailval)) {
+        $recipient_name = $petitioninfo['recipient_name'];
+        $recipient = $petitioninfo['recipient_email'];
+        $params = array( 'subject' => $petitioninfo['subject'] );
+        $user_message = 'custom_' . $petitioninfo['message_field'];
+        $from = civicrm_api("Contact","getsingle", array (version=>'3','sequential' =>'1', 'id' =>$objectRef->source_contact_id));
+        if ($from['email']) {
+          $fromline = $from['display_name'] . ' <' . $from['email'] . '>';
+        } else {
+          $domain = civicrm_api("Domain","get", array (version=>'3','sequential' =>'1'));
+          if ($domain['is_error'] || !is_array($domain['values'])) { return; }
+          $fromline = $from['display_name'] . ' <' . $domain['values']['from_email'] . '>';
+        }
+        $params['message'] = ( $objectRef->$user_message ) ? $objectRef->$user_message : $petitioninfo['default_message'];
+        $success = drupal_mail('civicrm_petition_email', 'signature', $recipient_name . ' <' . $recipient . '>', $language, $params, $fromline);
+        if($success['result']) {
+          CRM_Core_Session::setStatus( ts('Message sent successfully to') . " $recipient_name" );
+        } else {
+          CRM_Core_Session::setStatus( ts('Error sending message to') . " $recipient_name" );
+        }
+        break;
+      }
+    }
+  }
+}
+ 
+function civicrm_petition_email_mail($key, &$message, $params) {
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['message'];
+} 
+
+function civicrm_petition_email_get_petition_type() {
+  $petitiontype = variable_get('civicrm_petition_email_petitiontype', false);
+  
+  if (!$petitiontype) { // Go figure out and set the activity type id
+    $acttypegroup = civicrm_api("OptionGroup","getsingle", array(version=>'3','sequential' =>'1', 'name' =>'activity_type'));
+    if ($acttypegroup['id'] && !$acttypegroup['is_error']) {
+      $acttype = civicrm_api("OptionValue","getsingle", array (version=>'3','sequential' =>'1', 'option_group_id' =>$acttypegroup['id'], 'name' =>'Petition'));
+      if ($acttype['id'] && !$acttype['is_error']) {
+        $petitiontype = $acttype['value'];
+        variable_set('civicrm_petition_email_petitiontype', $acttype['value']);
+      }
+    }
+  }
+    
+  return $petitiontype;
+}

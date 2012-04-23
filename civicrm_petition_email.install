@@ -1,0 +1,57 @@
+<?php
+
+function civicrm_petition_email_install() {
+  drupal_install_schema('civicrm_petition_email');
+}
+
+function civicrm_petition_email_uninstall() {
+  drupal_uninstall_schema('civicrm_petition_email');
+  variable_del('civicrm_petition_email_petitiontype');
+}
+
+function civicrm_petition_email_schema() {
+  $schema['civicrm_petition_email'] = array(
+    'description' => t('Stores recipient and message information for petitions that should send emails'),
+    'fields' => array(
+      'petition_id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => t('The SID of the petition.'),
+      ),
+      'recipient_email' => array(
+        'type' => 'varchar',
+        'description' => t('The email of the petition target.'),
+        'length' => 128,
+      ),
+      'recipient_name' => array(
+        'type' => 'varchar',
+        'description' => t('The display name of the petition target.'),
+        'length' => 128,
+      ),
+      'default_message' => array(
+        'type' => 'text',
+        'description' => ('The default message for the petition'),
+      ),
+      'message_field' => array(
+        'type' => 'int',
+        'description' => t('The ID of the custom field used for petition messages.'),
+        'unsigned' => TRUE,
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'subject' => array(
+        'type' => 'varchar',
+        'description' => t('The subject line for outgoing emails.'),
+        'length' => 128,
+      ),
+    ),
+    'primary key' => array('petition_id'),
+    'indexes' => array(
+      'petition_id' => array('petition_id'),
+    ),
+  );
+  
+  return $schema;
+} 
