@@ -9,7 +9,7 @@ function civicrm_petition_email_civicrm_buildForm( $formName, &$form ) {
   if ($formName == 'CRM_Campaign_Form_Petition_Signature') {  
     $survey_id = $form->getVar('_surveyId');
     if ($survey_id) {
-      global $db_prefix;
+      $db_prefix = civicrm_petition_email_get_db_prefix();
       $petitionemailval = db_query('SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM ' . $db_prefix . 'civicrm_petition_email WHERE petition_id = %d', $survey_id);
       while ($petitioninfo = db_fetch_array($petitionemailval)) {
         $defaults = $form->getVar('_defaults');
@@ -29,7 +29,7 @@ function civicrm_petition_email_civicrm_buildForm( $formName, &$form ) {
   if ($formName != 'CRM_Campaign_Form_Petition') { return; }
   $survey_id = $form->getVar('_surveyId');
   if ($survey_id) {
-    global $db_prefix;
+    $db_prefix = civicrm_petition_email_get_db_prefix();
     $petitionemailval = db_query('SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM ' . $db_prefix . 'civicrm_petition_email WHERE petition_id = %d', $survey_id);
     while ($petitioninfo = db_fetch_array($petitionemailval)) {
       $form->_defaultValues['email_petition'] = 1;
@@ -192,7 +192,7 @@ function civicrm_petition_email_civicrm_postProcess( $formName, &$form ) {
       return;
     }
 
-    global $db_prefix;
+    $db_prefix = civicrm_petition_email_get_db_prefix();
     $checkexisting = db_query("SELECT count(*) FROM {$db_prefix}civicrm_petition_email WHERE petition_id = %d", $survey_id);
     if (db_result($checkexisting) == 0) {
       $insert = db_query(
@@ -228,7 +228,7 @@ function civicrm_petition_email_civicrm_post( $op, $objectName, $objectId, &$obj
     
     if ($objectRef->activity_type_id == $petitiontype) {
       global $language;  
-      global $db_prefix;  
+      $db_prefix = civicrm_petition_email_get_db_prefix();
       $petitionemailval = db_query("SELECT petition_id, recipient_email, recipient_name, default_message, message_field, subject FROM {$db_prefix}civicrm_petition_email WHERE petition_id = %d", $objectRef->source_record_id);
       while ($petitioninfo = db_fetch_array($petitionemailval)) {
         $recipient_name = $petitioninfo['recipient_name'];
@@ -276,4 +276,13 @@ function civicrm_petition_email_get_petition_type() {
   }
     
   return $petitiontype;
+}
+
+function civicrm_petition_email_get_db_prefix() {
+  global $db_prefix;
+  if (is_array($db_prefix)) {
+    return $db_prefix['default'];
+  } else {
+    return $db_prefix;
+  }
 }
