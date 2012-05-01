@@ -241,7 +241,7 @@ function civicrm_petition_email_civicrm_post( $op, $objectName, $objectId, &$obj
         } else {
           $domain = civicrm_api("Domain","get", array (version=>'3','sequential' =>'1'));
           if ($domain['is_error'] || !is_array($domain['values'])) { return; }
-          $fromline = $from['display_name'] . ' <' . $domain['values']['from_email'] . '>';
+          $fromline = '"' . $from['display_name'] . '"' . ' <' . $domain['values']['from_email'] . '>';
         }
         $params['message'] = ( $objectRef->$user_message ) ? $objectRef->$user_message : $petitioninfo['default_message'];
         $success = drupal_mail('civicrm_petition_email', 'signature', $recipient_name . ' <' . $recipient . '>', $language, $params, $fromline);
