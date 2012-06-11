@@ -75,7 +75,9 @@ function civicrm_petition_email_civicrm_buildForm( $formName, &$form ) {
 function civicrm_petition_email_civicrm_alterContent(  &$content, $context, $tplName, &$object ) {
   if ($tplName == 'CRM/Campaign/Form/Petition.tpl') {
     $rendererval = $object->getVar('_renderer');
-    
+    $action = $object->getVar('_action');
+    if ($action == 8) { return; }
+
     //insert the field before is_active
     $insertpoint = strpos($content, '<tr class="crm-campaign-survey-form-block-is_active">');
     $content1 = substr($content, 0, $insertpoint);
